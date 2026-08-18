@@ -1,0 +1,28 @@
+{
+  "name": "aws-sts-stub",
+  "version": "0.1.0",
+  "description": "A stub of the AWS STS GetWebIdentityToken API for local development and testing",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "lint": "tsc",
+    "test": "npm run lint && npm run test:unit && npm run test:integration",
+    "test:unit": "node --test \"test/unit/**/*.test.js\"",
+    "test:integration": "node --test \"test/integration/**/*.test.js\""
+  },
+  "dependencies": {
+    "@hapi/hapi": "^21.4.10",
+    "jose": "^6.0.0"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-sts": "^3.1112.0",
+    "@smithy/protocol-http": "^5.6.2",
+    "@types/node": "^24.13.3",
+    "typescript": "^7.0.2"
+  }
+}
