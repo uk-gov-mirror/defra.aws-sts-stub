@@ -1,13 +1,10 @@
 import { test, after, before } from 'node:test'
 import assert from 'node:assert/strict'
-import { Readable } from 'node:stream'
-
 import {
   GetWebIdentityTokenCommand,
   STSClient,
   STSServiceException
 } from '@aws-sdk/client-sts'
-import { HttpResponse } from '@smithy/protocol-http'
 import { createLocalJWKSet, decodeJwt, jwtVerify } from 'jose'
 
 import { ISSUER, jwks } from '../../src/keys.js'
@@ -21,34 +18,15 @@ let server
 let client
 
 before(async () => {
-  server = createServer({ awsAccountId: AWS_ACCOUNT_ID })
-  await server.initialize()
+  server = createServer({ awsAccountId: AWS_ACCOUNT_ID, host: '127.0.0.1' })
+  await server.start()
 
   client = new STSClient({
-    endpoint: 'http://sts.local',
+    endpoint: server.info.uri,
     region: 'eu-west-2',
     credentials: {
       accessKeyId: 'some-frontend',
       secretAccessKey: 'stub'
-    },
-    // The real SDK, but its requests go through server.inject, not a socket
-    requestHandler: {
-      handle: async (/** @type {HttpRequest} */ req) => {
-        const res = await server.inject({
-          method: req.method,
-          url: req.path,
-          headers: req.headers,
-          payload: req.body
-        })
-
-        return {
-          response: new HttpResponse({
-            statusCode: res.statusCode,
-            headers: /** @type {Record<string, string>} */ (res.headers),
-            body: Readable.from([res.rawPayload])
-          })
-        }
-      }
     }
   })
 })
@@ -73,9 +51,8 @@ const getToken = (algorithm) =>
 test('the real SDK can call the stub and parse its reply', async () => {
   const response = await getToken('RS256')
 
-  assert.equal(typeof response.WebIdentityToken, 'string')
-  assert.equal(response.WebIdentityToken?.split('.').length, 3)
-
+  // The SDK's deserializer, generated from the service model, is the shape
+  // check. decodeJwt throws if it did not hand back a JWT.
   const { exp } = decodeJwt(response.WebIdentityToken ?? '')
   assert.equal(response.Expiration?.getTime(), (exp ?? 0) * 1000)
 })
@@ -119,9 +96,10 @@ test('the SDK surfaces a rejected request as a modelled error', async () => {
           DurationSeconds: 10
         })
       ),
-    (/** @type {STSServiceException} */ err) => {
-      assert.equal(err.$metadata?.httpStatusCode, 400)
-      assert.match(err.message, /DurationSeconds/)
+    (err) => {
+      assert.ok(err instanceof STSServiceException)
+      assert.equal(err.name, 'ValidationError')
+      assert.equal(err.$fault, 'client')
       return true
     }
   )
@@ -129,5 +107,4 @@ test('the SDK surfaces a rejected request as a modelled error', async () => {
 
 /**
  * @import { Server } from '@hapi/hapi'
- * @import { HttpRequest } from '@smithy/protocol-http'
  */

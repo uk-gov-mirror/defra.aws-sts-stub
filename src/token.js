@@ -5,17 +5,8 @@ import { SignJWT } from 'jose'
 import { ISSUER, signingKeys } from './keys.js'
 
 /**
- * Mints a web identity token for a caller.
- *
- * Every value here comes from the request or from the stub's own
- * configuration. Nothing about the token's shape is configurable, because the
- * API it imitates offers no such parameter.
- *
- * Request tags go into the builder alongside the identity claims, and each
- * identity claim is then set through its own builder method, so that method
- * always wins regardless of what a same-named tag put there first.
- * `parseRequest` already rejects a tag key that matches a registered claim
- * name; this is a second, structural guarantee of the same property.
+ * Tags go in first. Each identity claim is then set by its own builder
+ * method, so a same-named tag can never win.
  * @param {{
  *   audience: string[],
  *   durationSeconds: number,
@@ -55,8 +46,7 @@ export async function mintToken({
     .setAudience(audience.length === 1 ? audience[0] : audience)
     .setIssuer(ISSUER)
     .setIssuedAt(issuedAt)
-    // A number here is used as-is rather than as an offset from now, so the
-    // token's `exp` and the `expiresAt` returned below cannot drift apart.
+    // A number is used as-is, so `exp` matches `expiresAt` below.
     .setExpirationTime(expiresAt)
     .setJti(randomUUID())
     .sign(key.privateKey)

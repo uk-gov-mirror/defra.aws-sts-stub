@@ -14,8 +14,7 @@ const XML = 'text/xml'
 const xml = (h, statusCode, xml) => h.response(xml).code(statusCode).type(XML)
 
 /**
- * The discovery document. `jwks_uri` is built from the request Host so it is
- * correct for whichever consumer asked, while `issuer` stays constant.
+ * `jwks_uri` follows the request Host; `issuer` is constant.
  * @param {Request} request
  */
 function discovery(request) {
@@ -29,8 +28,7 @@ function discovery(request) {
 }
 
 /**
- * Every error leaves as STS XML, so a caller using the AWS SDK gets a
- * modelled error rather than a parse failure.
+ * Sends hapi's own errors as STS XML, so the AWS SDK can parse them.
  * @type {Lifecycle.Method}
  */
 function xmlErrors(request, h) {
@@ -51,11 +49,10 @@ function xmlErrors(request, h) {
 }
 
 /**
- * Builds the stub's HTTP server
- * @param {{ awsAccountId: string, port?: number }} config
+ * @param {{ awsAccountId: string, port?: number, host?: string }} config
  */
-export function createServer({ awsAccountId, port = 0 }) {
-  const server = Hapi.server({ port })
+export function createServer({ awsAccountId, port = 0, host }) {
+  const server = Hapi.server({ port, host })
 
   server.ext('onPreResponse', xmlErrors)
 
@@ -63,7 +60,6 @@ export function createServer({ awsAccountId, port = 0 }) {
     {
       method: 'POST',
       path: '/',
-      // The query protocol body is parsed by hand, so take it as-is.
       options: { payload: { parse: false } },
       handler: async (request, h) => {
         try {

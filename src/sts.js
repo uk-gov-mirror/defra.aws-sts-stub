@@ -9,17 +9,10 @@ const DEFAULT_DURATION_SECONDS = 300
 const MIN_DURATION_SECONDS = 60
 const MAX_DURATION_SECONDS = 3600
 
-/**
- * RFC 7519 §4.1 registered claim names. A request tag using one of these as
- * its key would land in the token payload and either overwrite an identity
- * claim (if this object literal were ever reordered) or produce a claim,
- * such as `nbf`, that breaks verification everywhere. Rejecting them at the
- * request boundary keeps that protection true regardless of how the token
- * payload is built.
- */
+/** RFC 7519 registered claim names. A tag with one of these keys is rejected. */
 const RESERVED_CLAIMS = new Set(['iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti'])
 
-/** An error the stub reports in the query protocol's error shape */
+/** An error sent in the query protocol's error shape */
 export class StsError extends Error {
   /**
    * @param {string} code
@@ -33,7 +26,7 @@ export class StsError extends Error {
 }
 
 /**
- * Collects an indexed query-protocol list, e.g. `Audience.member.1`
+ * Reads an indexed list such as `Audience.member.1`
  * @param {URLSearchParams} params
  * @param {string} prefix
  * @param {string} [suffix]
@@ -51,10 +44,8 @@ function listMembers(params, prefix, suffix = '') {
 }
 
 /**
- * Real STS identifies the caller from the credentials that signed the
- * request. The access key id in the SigV4 credential scope is the equivalent
- * a stub has, and it preserves the property that matters: the caller cannot
- * ask to be someone else.
+ * The caller is the access key id in the SigV4 credential scope, as in real
+ * STS, so a caller cannot ask to be someone else.
  * @param {string} [authorization]
  */
 function callerFrom(authorization) {
@@ -97,7 +88,6 @@ function durationFrom(params) {
 }
 
 /**
- * Parses a query-protocol request body into the operation's parameters
  * @param {string} body
  * @param {string} [authorization]
  */
@@ -159,7 +149,6 @@ function escapeXml(value) {
 }
 
 /**
- * The success envelope, matching the `resultWrapper` the service model declares
  * @param {{ token: string, expiresAt: Date }} result
  */
 export function successXml({ token, expiresAt }) {
