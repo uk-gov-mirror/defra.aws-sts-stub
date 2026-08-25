@@ -29,7 +29,7 @@ there. No code changes; one environment variable does.
 ## Use
 
 ```bash
-docker run -p 4571:4571 defra/aws-sts-stub
+docker run -p 4571:4571 defradigital/aws-sts-stub
 ```
 
 In the calling service, point the AWS SDK at the stub. The access key id is
@@ -56,7 +56,7 @@ JWT_JWKS_URI=http://localhost:4571/.well-known/jwks.json
 ```yaml
 services:
   aws-sts-stub:
-    image: defra/aws-sts-stub
+    image: defradigital/aws-sts-stub
     ports:
       - '4571:4571'
     environment:
