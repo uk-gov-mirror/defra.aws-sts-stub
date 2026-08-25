@@ -30,7 +30,9 @@ jobs:
 
       # Stamp the git version into package.json
       - name: Set package.json version from the tag
-        run: npm version "${VERSION#v}" --no-git-tag-version
+        # npm pkg set writes the value even when it already matches, so
+        # re-releasing the current version succeeds.
+        run: npm pkg set version="${VERSION#v}"
 
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
