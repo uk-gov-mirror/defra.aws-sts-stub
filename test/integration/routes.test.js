@@ -12,7 +12,10 @@ const authorization =
 let server
 
 before(async () => {
-  server = createServer({ awsAccountId: '000000000000' })
+  server = await createServer({
+    awsAccountId: '000000000000',
+    logger: { level: 'silent' }
+  })
   await server.initialize()
 })
 
