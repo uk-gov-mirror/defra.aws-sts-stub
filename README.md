@@ -69,6 +69,8 @@ services:
 | ---------------- | -------------- | ------------------------------- |
 | `PORT`           | `4571`         | Listen port                     |
 | `AWS_ACCOUNT_ID` | `000000000000` | Account named in the minted `sub` |
+| `LOG_LEVEL`      | `info`         | Lowest level logged; `info` logs everything |
+| `LOG_FORMAT`     | `pretty`       | `pretty` for terminals, `json` for pino JSON lines |
 
 `DurationSeconds` is a request parameter. It defaults to 300 and accepts
 60–3600.
@@ -80,6 +82,22 @@ network. Only the JWKS URL changes between the two.
 Verifiers that fetch `{iss}/.well-known/openid-configuration` from the issuer
 string, such as `openid-client`, will fail DNS. Give them the metadata URL
 directly.
+
+## Logs
+
+The stub logs:
+
+- at startup: the port, account, issuer and the `kid` of each signing key
+- each request, with method, path, status and time (not `/health`)
+- each raw STS request body
+- each minted token: caller, `sub`, region, audience, algorithm, `kid`,
+  `jti`, duration, expiry and tags, then the full token
+- each rejected STS request, with its error code and message
+- the `kid`s served from the JWKS
+- the `jwks_uri` given in the OpenID configuration
+- each call to an unknown route, which means the caller has the wrong
+  endpoint URL
+- each unhandled error, with its stack
 
 ## Fidelity
 

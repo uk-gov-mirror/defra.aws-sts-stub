@@ -16,7 +16,13 @@ import { ISSUER, signingKeys } from './keys.js'
  *   awsAccountId: string,
  *   tags: { Key: string, Value: string }[]
  * }} input
- * @returns {Promise<{ token: string, expiresAt: Date }>}
+ * @returns {Promise<{
+ *   token: string,
+ *   expiresAt: Date,
+ *   principal: string,
+ *   kid: string,
+ *   jti: string
+ * }>}
  */
 export async function mintToken({
   audience,
@@ -31,6 +37,7 @@ export async function mintToken({
   const issuedAt = Math.floor(Date.now() / 1000)
   const expiresAt = issuedAt + durationSeconds
   const principal = `arn:aws:iam::${awsAccountId}:role/${serviceName}`
+  const jti = randomUUID()
 
   const token = await new SignJWT({
     ...Object.fromEntries(tags.map(({ Key, Value }) => [Key, Value])),
@@ -48,11 +55,14 @@ export async function mintToken({
     .setIssuedAt(issuedAt)
     // A number is used as-is, so `exp` matches `expiresAt` below.
     .setExpirationTime(expiresAt)
-    .setJti(randomUUID())
+    .setJti(jti)
     .sign(key.privateKey)
 
   return {
     token,
-    expiresAt: new Date(expiresAt * 1000)
+    expiresAt: new Date(expiresAt * 1000),
+    principal,
+    kid: key.kid,
+    jti
   }
 }

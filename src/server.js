@@ -1,4 +1,5 @@
 import Hapi from '@hapi/hapi'
+import hapiPino from 'hapi-pino'
 
 import { ISSUER, SUPPORTED_ALGORITHMS, jwks } from './keys.js'
 import { StsError, errorXml, parseRequest, successXml } from './sts.js'
@@ -42,17 +43,96 @@ function xmlErrors(request, h) {
 
   if (statusCode === 404) {
     const route = `${request.method.toUpperCase()} ${request.path}`
+
+    // A caller that reaches this has the wrong endpoint URL for the stub.
+    request.logger.warn(`No such route: ${route}`)
+
     return xml(h, 404, errorXml('UnknownOperation', `No such route: ${route}`))
   }
+
+  // The XML reply carries only the message, so the stack goes to the log.
+  request.logger[statusCode >= 500 ? 'error' : 'warn'](
+    { err: response },
+    response.message
+  )
 
   return xml(h, statusCode, errorXml('InternalFailure', String(response)))
 }
 
 /**
- * @param {{ awsAccountId: string, port?: number, host?: string }} config
+ * @param {Request} request
+ * @param {ResponseToolkit} h
+ * @param {string} awsAccountId
  */
-export function createServer({ awsAccountId, port = 0, host }) {
+async function getWebIdentityToken(request, h, awsAccountId) {
+  const body = String(request.payload ?? '')
+
+  request.logger.info({ body }, 'STS request body')
+
+  try {
+    const parsed = parseRequest(
+      body,
+      /** @type {string | undefined} */ (request.headers.authorization)
+    )
+    const minted = await mintToken({ ...parsed, awsAccountId })
+
+    request.logger.info(
+      {
+        sts: {
+          caller: parsed.serviceName,
+          sub: minted.principal,
+          region: parsed.region,
+          audience: parsed.audience,
+          algorithm: parsed.algorithm,
+          kid: minted.kid,
+          jti: minted.jti,
+          durationSeconds: parsed.durationSeconds,
+          expiresAt: minted.expiresAt.toISOString(),
+          tags: Object.fromEntries(
+            parsed.tags.map(({ Key, Value }) => [Key, Value])
+          )
+        }
+      },
+      `Minted ${parsed.algorithm} token for ${minted.principal}, audience ${parsed.audience.join(', ')}`
+    )
+    // The full token is for pasting into a JWT decoder when debugging a verifier.
+    request.logger.info({ token: minted.token }, 'Minted token')
+
+    return xml(h, 200, successXml(minted))
+  } catch (err) {
+    if (err instanceof StsError) {
+      request.logger.warn(
+        { sts: { code: err.code } },
+        `Rejected STS request: ${err.code}: ${err.message}`
+      )
+      return xml(h, 400, errorXml(err.code, err.message))
+    }
+    throw err
+  }
+}
+
+/**
+ * @param {{
+ *   awsAccountId: string,
+ *   port?: number,
+ *   host?: string,
+ *   logger?: Options
+ * }} config
+ */
+export async function createServer({ awsAccountId, port = 0, host, logger }) {
   const server = Hapi.server({ port, host })
+
+  await server.register({
+    plugin: hapiPino,
+    options: {
+      level: 'info',
+      // The container health check calls /health every 10 seconds.
+      ignorePaths: ['/health'],
+      customRequestCompleteMessage: (request, responseTime) =>
+        `${request.method.toUpperCase()} ${request.path} ${request.raw.res.statusCode} (${responseTime}ms)`,
+      ...logger
+    }
+  })
 
   server.ext('onPreResponse', xmlErrors)
 
@@ -61,22 +141,7 @@ export function createServer({ awsAccountId, port = 0, host }) {
       method: 'POST',
       path: '/',
       options: { payload: { parse: false } },
-      handler: async (request, h) => {
-        try {
-          const parsed = parseRequest(
-            String(request.payload ?? ''),
-            /** @type {string | undefined} */ (request.headers.authorization)
-          )
-          const token = await mintToken({ ...parsed, awsAccountId })
-
-          return xml(h, 200, successXml(token))
-        } catch (err) {
-          if (err instanceof StsError) {
-            return xml(h, 400, errorXml(err.code, err.message))
-          }
-          throw err
-        }
-      }
+      handler: (request, h) => getWebIdentityToken(request, h, awsAccountId)
     },
     {
       method: 'GET',
@@ -86,12 +151,32 @@ export function createServer({ awsAccountId, port = 0, host }) {
     {
       method: 'GET',
       path: '/.well-known/jwks.json',
-      handler: () => jwks()
+      handler: (request) => {
+        const keySet = jwks()
+
+        request.logger.info(
+          { kids: keySet.keys.map(({ kid }) => kid) },
+          'Served JWKS'
+        )
+
+        return keySet
+      }
     },
     {
       method: 'GET',
       path: '/.well-known/openid-configuration',
-      handler: (request) => discovery(request)
+      handler: (request) => {
+        const metadata = discovery(request)
+
+        // jwks_uri follows the Host header, so it is logged to show which
+        // address a verifier was told to fetch keys from.
+        request.logger.info(
+          { jwksUri: metadata.jwks_uri },
+          'Served OpenID configuration'
+        )
+
+        return metadata
+      }
     }
   ])
 
@@ -100,4 +185,5 @@ export function createServer({ awsAccountId, port = 0, host }) {
 
 /**
  * @import { Lifecycle, Request, ResponseToolkit } from '@hapi/hapi'
+ * @import { Options } from 'hapi-pino'
  */

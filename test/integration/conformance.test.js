@@ -18,7 +18,11 @@ let server
 let client
 
 before(async () => {
-  server = createServer({ awsAccountId: AWS_ACCOUNT_ID, host: '127.0.0.1' })
+  server = await createServer({
+    awsAccountId: AWS_ACCOUNT_ID,
+    host: '127.0.0.1',
+    logger: { level: 'silent' }
+  })
   await server.start()
 
   client = new STSClient({
